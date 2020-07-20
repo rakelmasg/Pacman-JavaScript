@@ -1,0 +1,67 @@
+/* 
+*	Fecha creación: 28/11/2015
+*	Autor: Raquel Más
+*/
+/*importamos una fuente personalizada de google fonts para el titulo*/
+@import url(https://fonts.googleapis.com/css?family=VT323);
+
+/*cuerpo: color de fondo, tipo de fuente*/
+body{
+	background: black;
+	font-family: VT323;
+}
+
+/*título principal: margen interno, tamaño fuente, color texto, tipo de fuente*/
+h1{  
+	padding: 5px;
+	font-size: 45px;
+	color: yellow;
+}
+
+/*cabecera y pie: alineamiento del texto*/
+header, footer{
+	text-align:center;
+}
+
+
+/*pie de página: margen superior, borde, margenes internos, color de fondo, tamaño fuente, grosor fuente, color texto*/
+footer{
+	font-family: arial;
+	margin-top:20px;
+	border:1px solid;
+	padding: 4px;
+	background-color: cyan;
+	font-size:14px;
+	font-weight:bold;
+	color:black;
+}
+
+/*canvas tablero: margen inferior, borde*/
+canvas{
+}
+
+/*puntuacion: tamanño fuente, color, margen izquierdo*/
+#score{
+	font-size:28px;
+	color:white;
+	margin-left: 20px;
+}
+/*puntuacion max: tamanño fuente, color, margen izquierdo*/
+#hscore{
+	font-size:28px;
+	color:white;
+	float:right;
+}
+/*puntuacion: flotar a la derecha, margen inferior*/
+#vidas{
+	float:right;
+	margin-bottom:10px;
+}
+
+img{
+	margin-bottom:-10px;
+}
+
+
+
+

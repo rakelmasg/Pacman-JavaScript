@@ -1,0 +1,732 @@
+<!-- 
+	Fecha creación: 28/11/2015 
+	Autor: Raquel Más
+-->
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html;" charset="UTF-8" />
+		<meta name="author" content="Raquel Más" />
+		<title>Pr&aacute;ctica 3: PAC-MAN</title>
+		<!-- añadimos un icono para la pestaña-->
+		<link rel="icon" type="image/gif" href="./img/favicon.gif">
+		<!-- incluimos las hojas de estilo-->
+		<link rel="stylesheet" href="css/reset.css" />
+		<link rel="stylesheet" href="css/theme.css" />
+		<!-- incluimos los scripts de javascript -->
+		<script type="text/javascript" src="js/astar.js"></script>
+		<script>
+			//asignamos al evento de carga la función para inicializar el juego
+			window.onload = inicializar;
+			
+			//variables html
+			var score;
+			var hscore;
+			var health;
+			var cnv;
+			var wrapper;
+			
+			//variables para el canvas
+			var imagenSprites;
+			var spritesCargados =false;
+			var listaSprites;
+			
+			//tablero de juego
+			var mapa;
+			
+			//musica
+			var intro;
+			var waka;
+			var muerte;
+			var eatGhost;
+			
+			//constantes
+			var TAMANIOSPRITE = 16;
+			var ALTOMAPA = 31;
+			var ANCHOMAPA = 28;
+			var ARRIBA = "arriba";
+			var ABAJO = "abajo";
+			var DERECHA	= "derecha";
+			var IZQUIERDA = "izquierda";
+			var NOACCION = "";
+			
+			
+			//id intervalo de actualizacion del estado de juego
+			var actualiza;
+			
+			var especial=false;
+			var especialID;
+			
+			//cargamos los sprites y tiles
+			cargarSprites();
+			
+			//prepara los datos y manda iniciar el juego
+			function inicializar(){
+				//seleccionamos los elementos html
+				wrapper = document.getElementById('wrapper');
+				cnv = document.getElementsByTagName('canvas')[0];
+				score=document.getElementsByTagName('span')[0];
+				hscore=document.getElementsByTagName('span')[1];
+				health=document.getElementsByTagName('span')[2];
+				intro = document.getElementById('intro');
+				waka = document.getElementById('waka');
+				muerte = document.getElementById('muerte');
+				eatGhost = document.getElementById('eatGhost');
+				
+				escalar(cnv);//ajusta el contenido según el tamaño de la ventana
+				
+				//creamos el tablero
+				mapa = new Mapa(cnv.getContext("2d"));
+				mapa.init(); //lo inicializamos
+				
+				requestAnimationFrame(actualizarEscena); //mostramos el mapa con el timer
+				
+				window.addEventListener('keydown',keyControler,false);
+				pintarInterfaz(); //muestra la interfaz
+				intro.play(); //reproduce el sonido de intro
+				setTimeout(empezar, 5000); //empieza el juego pasado el tiempo
+			}
+			
+			//ajusta el contenido según el tamaño de la ventana
+			function escalar(){	
+				//calculamos el margen del nav para que le canvas quede centrado
+				var margen_lateral=(window.innerWidth-cnv.width)/2; 
+				//asignamos a los elementos sus margenes
+				wrapper.style.marginLeft=margen_lateral+'px';
+				wrapper.style.marginRight=margen_lateral+20+'px';
+			}
+			
+			//muestra las vidas y la puntuacion por pantalla
+			function pintarInterfaz(){	
+				score.innerHTML=mapa.score;
+				if(hscore.innerHTML<mapa.score)
+					hscore.innerHTML=mapa.score;
+				if(mapa.vidas==2){
+					health.innerHTML="<img width='20px' height='20px' src='./img/favicon.gif'/>"+
+						"<img width='20px' height='20px' src='./img/favicon.gif'/>";
+				}else if(mapa.vidas==1){
+					health.innerHTML="<img width='20px' height='20px' src='./img/favicon.gif'/>";
+				}else{
+					health.innerHTML="";
+				}				
+			}
+			
+			//inicia el juego
+			function empezar(){
+				actualiza=setInterval(actualizar, 100); //actualiza el estado del juego
+				setTimeout(function(){mapa.activos[1]=true;},10000); //se activa un segundo fantasma
+				setTimeout(function(){mapa.activos[2]=true;},20000); //se activa tercer fantasma
+				setTimeout(function(){mapa.activos[3]=true;},30000); //se activa un cuarto fantasma
+			}
+					
+			//actualiza las posiciones de los personajes y comprueba si el actor esta vivo
+			function actualizar(){
+				mapa.muevePersonajes();
+				for(var i=0;i<mapa.activos.length;i++){
+					if(mapa.activos[i]==true){
+						if(mapa.enemies[i].salido==true){
+							mapa.actualizaRutaFantasma(mapa.enemies[i]); //algoritmo a*
+						}else{
+							if(mapa.enemies[i].x==13.5 && mapa.enemies[i].y==11){ //si los fantasmas han salido de la sala
+								mapa.enemies[i].salido=true;
+							}else{ //ruta para que salgan de la sala
+								mapa.enemies[i].xDestino=13.5;
+								mapa.enemies[i].yDestino=11;
+								mapa.enemies[i].enMovimiento=true;
+							}
+						}
+					}
+				
+				}
+				
+				mapa.comprobarMuerte();
+				mapa.comprobarGanar();
+			}		
+			
+			//comprueba la direcciones y muestra por pantalla el mapa y la interfaz
+			function actualizarEscena(){
+				if (spritesCargados == true){	
+					mapa.actualizaPulsacionesPendientes ();							
+					mapa.render(); //también pinta los personajes
+					pintarInterfaz();
+				} 
+				requestAnimationFrame(actualizarEscena); //volvemos a llamar la función
+			}
+			
+			//guardamos en una lista los sprites que vamos a necesitar para los personajes y objetos 
+			function cargarSprites(){
+				imagenSprites = new Image();
+				imagenSprites.src = "./img/sprites2.png"; //imagen con todos los gráficos
+				listaSprites = [];
+				imagenSprites.onload = function(){
+					var x, y;
+					var spriteID = 0;
+					//pacman inicial
+					listaSprites[spriteID] = new Sprite(imagenSprites, 489, 0, TAMANIOSPRITE, TAMANIOSPRITE);
+					
+					//sprites pacman
+					for (var ySprite = 0; ySprite < 4; ySprite++){
+						spriteID++;
+						x = 470;
+						y = ySprite*(TAMANIOSPRITE);
+						listaSprites[spriteID] = new Sprite(imagenSprites, x, y, TAMANIOSPRITE, TAMANIOSPRITE);
+						spriteID++;
+						x = 470-TAMANIOSPRITE;
+						listaSprites[spriteID] = new Sprite(imagenSprites, x, y, TAMANIOSPRITE, TAMANIOSPRITE);
+						
+					}
+					
+					//sprites fantasmas
+					for (var ySprite = 0; ySprite < 4; ySprite++){
+						for (var xSprite = 0; xSprite < 8; xSprite++){
+							spriteID++;
+							x = 456+xSprite*TAMANIOSPRITE;
+							y = ySprite*TAMANIOSPRITE+(TAMANIOSPRITE)*4;
+							listaSprites[spriteID] = new Sprite(imagenSprites, x, y, TAMANIOSPRITE, TAMANIOSPRITE);						
+						}
+					}
+					spriteID++;
+					//punto pequenio
+					listaSprites[spriteID] = new Sprite(imagenSprites, 639, 28, TAMANIOSPRITE/2, TAMANIOSPRITE/2);	
+					spriteID++;
+					//punto grande
+					listaSprites[spriteID] = new Sprite(imagenSprites, 630, 28, TAMANIOSPRITE/2, TAMANIOSPRITE/2);	
+					spritesCargados=true;
+					
+					spriteID++;
+					//punto pequenio
+					listaSprites[spriteID] = new Sprite(imagenSprites, 456+8*TAMANIOSPRITE, TAMANIOSPRITE+(TAMANIOSPRITE)*3, TAMANIOSPRITE, TAMANIOSPRITE);	
+					spriteID++;
+					//punto grande
+					listaSprites[spriteID] = new Sprite(imagenSprites, 456+9*TAMANIOSPRITE, TAMANIOSPRITE+(TAMANIOSPRITE)*3, TAMANIOSPRITE, TAMANIOSPRITE);	
+					spritesCargados=true;
+				};
+			}
+			
+			//constructor de sprites con sus propiedades
+			function Sprite (imagenFuente, x, y, ancho, alto)
+			{			
+				var imagen = imagenFuente;	
+				this.x = x;
+				this.y = y;
+				this.ancho = ancho;
+				this.alto = alto;
+				//dibuja el sprite en el contexto dado, en la posición x,y
+				this.dibuja = function(contexto, x, y, escala){
+					contexto.drawImage(imagen, this.x, this.y, this.ancho, this.alto, x, y, this.ancho*escala, this.alto*escala);
+				}			
+			}
+			
+			//constructor del mapa
+			function Mapa(ctxt){
+				var contexto=ctxt;
+				var actor;
+				this.enemies = [];
+				this.activos = [];
+				//array para inicializar con sus tiles representados numericamente
+				var tableroCopia=[
+							1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+							1,2,2,2,2,2,2,2,2,2,2,2,2,1,1,2,2,2,2,2,2,2,2,2,2,2,2,1,
+							1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1,
+							1,3,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,3,1,
+							1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1,
+							1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,
+							1,2,1,1,1,1,2,1,1,2,1,1,1,1,1,1,1,1,2,1,1,2,1,1,1,1,2,1,
+							1,2,1,1,1,1,2,1,1,2,1,1,1,1,1,1,1,1,2,1,1,2,1,1,1,1,2,1,
+							1,2,2,2,2,2,2,1,1,2,2,2,2,1,1,2,2,2,2,1,1,2,2,2,2,2,2,1,
+							1,1,1,1,1,1,2,1,1,1,1,1,0,1,1,0,1,1,1,1,1,2,1,1,1,1,1,1,
+							0,0,0,0,0,1,2,1,1,1,1,1,0,1,1,0,1,1,1,1,1,2,1,0,0,0,0,0,
+							0,0,0,0,0,1,2,1,1,0,0,0,0,0,0,0,0,0,0,1,1,2,1,0,0,0,0,0,
+							0,0,0,0,0,1,2,1,1,0,1,1,1,4,4,1,1,1,0,1,1,2,1,0,0,0,0,0,
+							1,1,1,1,1,1,2,1,1,0,1,0,0,0,0,0,0,1,0,1,1,2,1,1,1,1,1,1,
+							0,0,0,0,0,0,2,0,0,0,1,0,0,0,0,0,0,1,0,0,0,2,0,0,0,0,0,0,
+							1,1,1,1,1,1,2,1,1,0,1,0,0,0,0,0,0,1,0,1,1,2,1,1,1,1,1,1,
+							0,0,0,0,0,1,2,1,1,0,1,1,1,1,1,1,1,1,0,1,1,2,1,0,0,0,0,0,
+							0,0,0,0,0,1,2,1,1,0,0,0,0,0,0,0,0,0,0,1,1,2,1,0,0,0,0,0,
+							0,0,0,0,0,1,2,1,1,0,1,1,1,1,1,1,1,1,0,1,1,2,1,0,0,0,0,0,							
+							1,1,1,1,1,1,2,1,1,0,1,1,1,1,1,1,1,1,0,1,1,2,1,1,1,1,1,1,							
+							1,2,2,2,2,2,2,2,2,2,2,2,2,1,1,2,2,2,2,2,2,2,2,2,2,2,2,1,
+							1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1,
+							1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1,
+							1,3,2,2,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,2,2,3,1,
+							1,1,1,2,1,1,2,1,1,2,1,1,1,1,1,1,1,1,2,1,1,2,1,1,2,1,1,1,
+							1,1,1,2,1,1,2,1,1,2,1,1,1,1,1,1,1,1,2,1,1,2,1,1,2,1,1,1,
+							1,2,2,2,2,2,2,1,1,2,2,2,2,1,1,2,2,2,2,1,1,2,2,2,2,2,2,1,
+							1,2,1,1,1,1,1,1,1,1,1,1,2,1,1,2,1,1,1,1,1,1,1,1,1,1,2,1,
+							1,2,1,1,1,1,1,1,1,1,1,1,2,1,1,2,1,1,1,1,1,1,1,1,1,1,2,1,
+							1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,
+							1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+							];
+				var tablero	=tableroCopia.slice();
+				
+				//matriz de transparencias
+				var atravesables=[
+							[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+							[2,1,1,1,1,1,1,1,1,1,1,1,1,2,2,1,1,1,1,1,1,1,1,1,1,1,1,2],
+							[2,1,2,2,2,2,1,2,2,2,2,2,1,2,2,1,2,2,2,2,2,1,2,2,2,2,1,2],
+							[2,1,2,2,2,2,1,2,2,2,2,2,1,2,2,1,2,2,2,2,2,1,2,2,2,2,1,2],
+							[2,1,2,2,2,2,1,2,2,2,2,2,1,2,2,1,2,2,2,2,2,1,2,2,2,2,1,2],
+							[2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+							[2,1,2,2,2,2,1,2,2,1,2,2,2,2,2,2,2,2,1,2,2,1,2,2,2,2,1,2],
+							[2,1,2,2,2,2,1,2,2,1,2,2,2,2,2,2,2,2,1,2,2,1,2,2,2,2,1,2],
+							[2,1,1,1,1,1,1,2,2,1,1,1,1,2,2,1,1,1,1,2,2,1,1,1,1,1,1,2],
+							[2,2,2,2,2,2,1,2,2,2,2,2,1,2,2,1,2,2,2,2,2,1,2,2,2,2,2,2],
+							[1,1,1,1,1,2,1,2,2,2,2,2,1,2,2,1,2,2,2,2,2,1,2,1,1,1,1,1],
+							[1,1,1,1,1,2,1,2,2,1,1,1,1,1,1,1,1,1,1,2,2,1,2,1,1,1,1,1],
+							[1,1,1,1,1,2,1,2,2,1,2,2,2,2,2,2,2,2,1,2,2,1,2,1,1,1,1,1],
+							[2,2,2,2,2,2,1,2,2,1,2,1,1,1,1,1,1,2,1,2,2,1,2,2,2,2,2,2],
+							[1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1],
+							[2,2,2,2,2,2,1,2,2,1,2,1,1,1,1,1,1,2,1,2,2,1,2,2,2,2,2,2],
+							[1,1,1,1,1,2,1,2,2,1,2,2,2,2,2,2,2,2,1,2,2,1,2,1,1,1,1,1],
+							[1,1,1,1,1,2,1,2,2,1,1,1,1,1,1,1,1,1,1,2,2,1,2,1,1,1,1,1],
+							[1,1,1,1,1,2,1,2,2,1,2,2,2,2,2,2,2,2,1,2,2,1,2,1,1,1,1,1],							
+							[2,2,2,2,2,2,1,2,2,1,2,2,2,2,2,2,2,2,1,2,2,1,2,2,2,2,2,2],							
+							[2,1,1,1,1,1,1,1,1,1,1,1,1,2,2,1,1,1,1,1,1,1,1,1,1,1,1,2],
+							[2,1,2,2,2,2,1,2,2,2,2,2,1,2,2,1,2,2,2,2,2,1,2,2,2,2,1,2],
+							[2,1,2,2,2,2,1,2,2,2,2,2,1,2,2,1,2,2,2,2,2,1,2,2,2,2,1,2],
+							[2,1,1,1,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,1,1,1,2],
+							[2,2,2,1,2,2,1,2,2,1,2,2,2,2,2,2,2,2,1,2,2,1,2,2,1,2,2,2],
+							[2,2,2,1,2,2,1,2,2,1,2,2,2,2,2,2,2,2,1,2,2,1,2,2,1,2,2,2],
+							[2,1,1,1,1,1,1,2,2,1,1,1,1,2,2,1,1,1,1,2,2,1,1,1,1,1,1,2],
+							[2,1,2,2,2,2,2,2,2,2,2,2,1,2,2,1,2,2,2,2,2,2,2,2,2,2,1,2],
+							[2,1,2,2,2,2,2,2,2,2,2,2,1,2,2,1,2,2,2,2,2,2,2,2,2,2,1,2],
+							[2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+							[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+							];
+				this.score=0;
+				this.vidas=2;
+				this.pulsacion;
+				this.lastPulsacion;
+				
+				//inicializa los enemigos y el actor
+				this.init = function(){
+						this.pulsacion = NOACCION;
+						this.lastPulsacion = NOACCION;
+						actor = new Actor(14,23,"pacman",2,0);
+						for(var i=0;i<4;i++) //inciamos todos los fantasmas
+							this.inicializarFantasma(i);						
+				}
+				
+				//devuelve si la casilla se puede atravesar
+				esAtravesable= function(x,y){
+					return (atravesables[y][x]==1)? true:false;
+				}
+				
+				//inicia los fantasmas en las posiciones predeterminadas
+				this.inicializarFantasma = function(num){
+					mapa.activos[num]=false;
+					switch(num) {
+						case 0:
+							this.enemies[0]=new Actor(13.5,11,"fantasma",1,9);
+							this.enemies[0].actualizaSprite(ABAJO);
+							setTimeout(activarFantasma,5000,num);
+							break;
+						case 1:
+							this.enemies[1]=new Actor(11.5,14,"fantasma",1,17);
+							this.enemies[1].actualizaSprite(ABAJO);
+							setTimeout(activarFantasma,10000,num);
+							break;
+						case 2:
+							this.enemies[2]=new Actor(13.5,14,"fantasma",1,25);
+							this.enemies[2].actualizaSprite(ABAJO);
+							setTimeout(activarFantasma,20000,num);
+							break;
+						case 3:
+							this.enemies[3]=new Actor(15.5,14,"fantasma",1,33);
+							this.enemies[3].actualizaSprite(ABAJO);
+							setTimeout(activarFantasma,30000,num);
+							break;	
+					}
+
+				}
+				
+				var activarFantasma = function(num){
+					mapa.activos[num]=true;
+					if(num==0)
+						mapa.enemies[0].salido=true;
+				
+				}
+					
+				//movemos todos los personajes
+				this.muevePersonajes = function(){
+					this.muevePersonaje(actor);
+					for(var j=0;j<this.activos.length;j++){
+						if(this.activos[j]==true)
+							this.muevePersonaje(this.enemies[j]);
+					}
+				}
+					
+				//comprueba si el personaje se puede mover y actualiza sus coordenadas
+				this.validaActualizaMovimiento = function(personaje, direccion){
+					switch(direccion){
+						case ARRIBA:
+							var futuraY  = personaje.y - 1;
+							var futuraX  = Math.floor(personaje.x);
+							break;
+						case ABAJO:							
+							var futuraY = personaje.y + 1;
+							var futuraX = Math.floor(personaje.x);							
+							break;
+						case DERECHA:
+							var futuraY = personaje.y;
+							var futuraX = Math.floor(personaje.x) + 1;	
+							if(futuraY==14 && futuraX==28){
+								futuraX=1;
+								personaje.x=0;
+							}
+							break;
+						case IZQUIERDA:
+							var futuraY = personaje.y;
+							var futuraX = Math.floor(personaje.x)- 1;
+							if(futuraY==14 && futuraX==-1){
+								futuraX=26;
+								personaje.x=27;
+							}							
+							break;
+						
+					}
+
+					//cambiamos la coordenada si la casilla es atravesable			
+					if (esAtravesable(futuraX, futuraY) == true){
+						if(personaje.tipo=="pacman")
+							mapa.lastPulsacion=mapa.pulsacion;
+						personaje.yDestino = futuraY;
+						personaje.xDestino = futuraX;
+						personaje.enMovimiento = true;
+						return 0;
+					}else{
+						if(personaje.tipo=="pacman")
+							this.pulsacion=this.lastPulsacion;
+							
+						return 1;
+					}
+				}
+				//comprueba si el personaje ha llegado o no a su destino
+				movimientoTerminado = function (personaje){
+					if (personaje.x == personaje.xDestino && personaje.y == personaje.yDestino)
+					{
+						personaje.enMovimiento = false;
+						return true;
+					}
+					else
+						return false;
+			
+				}
+				
+				
+				//si hay una acción de movimiento pendiente y el actor ya terminó su último movimiento la realiza			
+				this.actualizaPulsacionesPendientes = function()
+				{	
+					if (this.pulsacion != NOACCION && movimientoTerminado(actor) == true){
+						this.validaActualizaMovimiento(actor, this.pulsacion);
+					}
+				}
+				
+				//desplaza el personaje indicado hacia su destino
+				this.muevePersonaje = function(personaje){
+					if (personaje.enMovimiento == true)
+					{
+						if (personaje.x < personaje.xDestino)
+						{
+							personaje.x += personaje.velocidad;
+							//si la velocidad no es múltiplo de la posición puede que nos pasemos
+							//en ese caso solo avanzamos hasta el destino
+							if (personaje.x > personaje.xDestino)
+							personaje.x = personaje.xDestino;
+							personaje.actualizaSprite(DERECHA);
+						}
+						else
+						if (personaje.x > personaje.xDestino)
+						{
+							personaje.x -= personaje.velocidad;
+							if (personaje.x < personaje.xDestino)
+								personaje.x = personaje.xDestino;						
+							personaje.actualizaSprite(IZQUIERDA);
+						}
+						else
+						if (personaje.y < personaje.yDestino)	
+						{
+							personaje.y += personaje.velocidad;					
+							if (personaje.y > personaje.yDestino)
+								personaje.y = personaje.yDestino;
+						
+							personaje.actualizaSprite(ABAJO);
+						}
+						else
+						if (personaje.y > personaje.yDestino)
+						{
+							personaje.y -= personaje.velocidad;
+							if (personaje.y < personaje.yDestino)
+								personaje.y = personaje.yDestino;
+							
+							personaje.actualizaSprite(ARRIBA);
+						}
+						else
+							personaje.enMovimiento = false; //el personaje ha llegado al destino
+					}
+					//si el personaje es pacman
+					if(personaje.tipo=="pacman"){ //comprobamos si hay algún objeto
+						this.comprobarObjetos(personaje);
+					}
+				}
+								
+				//calcula la ruta a seguir por los fantasmas
+				this.actualizaRutaFantasma = function(fantasma){
+					//algoritmo A*
+					var grafoMapaTransparencia = new Graph(atravesables);												
+					
+					var fin = grafoMapaTransparencia.grid[actor.y][actor.x];
+					var inicio = grafoMapaTransparencia.grid[fantasma.y][Math.floor(fantasma.x)];		
+				
+					this.camino = astar.search(grafoMapaTransparencia, inicio, fin);
+					
+					var azar = Math.random();
+					if (this.camino.length > 0)	{					
+						if (this.camino[0].y < fantasma.x){
+							if(azar<0.5){
+								if(especial==false)
+								this.validaActualizaMovimiento(fantasma, IZQUIERDA);
+								else
+								this.validaActualizaMovimiento(fantasma, DERECHA);
+							}else{
+								this.validaActualizaMovimiento(fantasma, ABAJO);
+							}
+						}else if (this.camino[0].y > fantasma.x){
+							if(azar<0.5){
+								if(especial==false)
+								this.validaActualizaMovimiento(fantasma, DERECHA);
+								else
+								this.validaActualizaMovimiento(fantasma, IZQUIERDA);
+							}else{
+								this.validaActualizaMovimiento(fantasma, ARRIBA);
+							}
+						}else if (this.camino[0].x < fantasma.y){
+							if(azar<0.5){
+								if(especial==false)
+								this.validaActualizaMovimiento(fantasma, ARRIBA);
+								else
+								this.validaActualizaMovimiento(fantasma, ABAJO);
+							}else{
+								this.validaActualizaMovimiento(fantasma, IZQUIERDA);
+							}
+						}else if (this.camino[0].x > fantasma.y){
+							if(azar<0.5){
+								if(especial==false)
+								this.validaActualizaMovimiento(fantasma, ABAJO);
+								else
+								this.validaActualizaMovimiento(fantasma, ARRIBA);
+							}else{
+								this.validaActualizaMovimiento(fantasma, DERECHA);
+							}
+						}
+					}
+				}
+				
+				this.comprobarObjetos = function(personaje){
+					if(tablero[personaje.y*ANCHOMAPA+personaje.x]==2){
+						tablero[personaje.y*ANCHOMAPA+personaje.x]=0;
+						this.score+=10;
+						waka.play();
+					} else if(tablero[personaje.y*ANCHOMAPA+personaje.x]==3){
+						tablero[personaje.y*ANCHOMAPA+personaje.x]=0;
+						this.score+=50;
+						clearTimeout(especialID);
+						especial=true; //activamos que se puedan comer fantasmas
+						especialID=setTimeout(function(){especial=false;},6000); //lo desactivamos a los 4 segundos
+					}
+				}
+
+				//comprobamos si nos ha alcanzado algún fantasma
+				this.comprobarMuerte = function(){
+					for(var i=0;i<this.enemies.length;i++){ //para todos los fantasmas
+						if(this.enemies[i].x==actor.x && this.enemies[i].y==actor.y){ //si están en el msimo casilla
+							if(especial==true) {
+								eatGhost.play();
+								this.score+=200;
+								this.inicializarFantasma(i);						
+							}else{
+								this.reiniciar();
+								muerte.play(); //reproducimos sonido muerto
+							}
+						}
+					}
+				}
+				//comprobamos si hemos recogido todos los puntos
+				this.comprobarGanar = function(){
+					for(var i=0;i<ANCHOMAPA;i++){ //para todos los fantasmas
+						for(var j=0;j<ALTOMAPA;j++){ //para todos los fantasmas
+							if(tablero[j*ANCHOMAPA+i]==2 || tablero[j*ANCHOMAPA+i]==3){
+								return 0;
+							}
+						}
+					}
+					this.vidas=0; //para que inicie el nivel desde 0
+					alert("LO HICIMOS!!");
+					this.reiniciar();
+				}
+				
+				//reinicia el nivel o el juego (si no quedan vidas)
+				this.reiniciar = function(){
+					this.pulsacion = NOACCION;
+					especial=false;
+					if(this.vidas==0){ //si no le quedan vidas
+						this.score=0;
+						this.vidas=2;
+						tablero	= tableroCopia.slice(); //volvemos a cargar las bolitas
+					}else{  //si le quedan vidas
+						this.vidas--;
+					}
+					this.init(); //iniciamos los personajes
+					clearInterval(actualiza); //paramos los personajes
+					setTimeout(empezar, 2000); //empezamos el juego pasado el tiempo
+				}
+				
+				//muestra el mapa por pantalla
+				this.render = function(){
+					contexto.clearRect(0,0,ANCHOMAPA*TAMANIOSPRITE,ALTOMAPA*TAMANIOSPRITE);
+					contexto.drawImage(imagenSprites, 228, 0, 224, 248, 0, 0,ANCHOMAPA*TAMANIOSPRITE,ALTOMAPA*TAMANIOSPRITE);
+					for(var j=0;j<ALTOMAPA;j++){
+						for(var i=0;i<ANCHOMAPA;i++){
+							if(tablero[j*ANCHOMAPA+i]==2)
+								listaSprites[41].dibuja(contexto, i*TAMANIOSPRITE+2, j*TAMANIOSPRITE+1,2);
+							if(tablero[j*ANCHOMAPA+i]==3)
+								listaSprites[42].dibuja(contexto, i*TAMANIOSPRITE, j*TAMANIOSPRITE+1,2);
+						}
+					}
+					actor.render(contexto);	
+					for(var k=0;k<4;k++)
+						this.enemies[k].render(contexto);
+				}
+			}
+			
+			//constructor de los personajes
+			function Actor(x, y, tipo, velocidad, posicionSpriteBase)
+			{
+				//posición actual en tiles del mapa
+				this.x = x;
+				this.y = y;
+				//posicion a donde se quiere mover el personaje
+				this.xDestino = x;
+				this.yDestino = y;
+				//indicador de si se está moviendo o no
+				this.enMovimiento = false;
+				//velocidad de movimiento
+				this.velocidad = velocidad;
+				//posición dentro del vector de sprites donde está el primer sprite del personaje
+				this.posicionSpriteBase = posicionSpriteBase;
+				//sprite del personaje contando a partir del sprite base
+				if(tipo=="fantasma"){
+					this.salido=false;
+					this.spriteActual = 1;
+					this.aux=true;
+				}else{
+					this.spriteActual = 0;	//para el sprite centrado	
+				}
+				//tipo de actor
+				this.tipo = tipo;
+
+				this.actualizaSprite = function(direccion)
+				{
+					if(this.tipo=="fantasma" && especial==true){
+						if(this.aux==true){
+							this.spriteActual = 44-this.posicionSpriteBase;
+							this.aux=false;
+						}else{
+							this.spriteActual = 45-this.posicionSpriteBase;
+							this.aux=true;
+						}
+					}else{
+						this.spriteActual++;
+						// sprite 0 solo PAC-MAN
+						switch(direccion)
+						{
+						case DERECHA:
+								if (this.spriteActual != 2)
+									this.spriteActual = 1;
+								break;
+						case IZQUIERDA:
+								if (this.spriteActual != 4)
+									this.spriteActual = 3;
+								break;
+						case ARRIBA:
+								if (this.spriteActual != 6)
+									this.spriteActual = 5;
+								break;
+						case ABAJO:
+								if (this.spriteActual != 8)
+									this.spriteActual = 7;
+								break;										
+						}
+					}
+					
+				}
+				//dibuja al personaje en el contexto gráfico facilitado
+				this.render = function(contexto)
+				{
+					if(this.tipo=="fantasma"){
+						listaSprites[this.posicionSpriteBase + this.spriteActual-1].dibuja(contexto, this.x*TAMANIOSPRITE-8, this.y*TAMANIOSPRITE-5,2);
+					}else{
+						listaSprites[this.posicionSpriteBase + this.spriteActual].dibuja(contexto, this.x*TAMANIOSPRITE-11, this.y*TAMANIOSPRITE-5,2);
+					}
+				}
+			}
+			
+			//controla la dirección de pacman a través del teclado
+			function keyControler(e){
+				switch(e.keyCode){
+					case 37: //izquierda
+						mapa.pulsacion=IZQUIERDA;
+						break;
+					case 38: //arriba
+						mapa.pulsacion=ARRIBA;
+						break;
+					case 39: //derecha
+						mapa.pulsacion=DERECHA;
+						break;
+					case 40: //abajo
+						mapa.pulsacion=ABAJO;
+						break;
+				}
+			}
+	</script>  	
+	</head>
+	<!-- asignamos la funcion escalar al evento resize para que no pierda las proporciones-->
+	<body onresize='escalar()'>
+		<header>
+			<h1>PAC-MAN</h1> 
+		</header>
+			<div id="wrapper">
+				<span id="score">0</span><span id="hscore">0</span><br>
+				<!-- contexto gráfico del mundo-->
+				<canvas width='448'	height='498'></canvas>
+				<span id="vidas"></span><br>
+			</div>
+		<footer>&#169; 2015 Raquel M&aacute;s Garc&iacute;a</footer>
+
+		<!-- musica inicial en diferentes formatos-->
+		<audio id="intro">
+			<source src='.\audio\intro.ogg'></source>
+			<source src='.\audio\intro.wav'></source>
+			<source src='.\audio\intro.mp3'></source>
+		</audio>
+		<!-- sonido de comer puntos en diferentes formatos-->
+		<audio id="waka">
+			<source src='.\audio\waka.ogg'></source>
+			<source src='.\audio\waka.wav'></source>
+			<source src='.\audio\waka.mp3'></source>
+		</audio>
+		<!-- sonido de muerte en diferentes formatos-->
+		<audio id="muerte">
+			<source src='.\audio\muerte.ogg'></source>
+			<source src='.\audio\muerte.wav'></source>
+			<source src='.\audio\muerte.mp3'></source>
+		</audio>
+		<!-- sonido de muerte fantasma en diferentes formatos-->
+		<audio id="eatGhost">
+			<source src='.\audio\eatGhost.ogg'></source>
+			<source src='.\audio\eatGhost.wav'></source>
+			<source src='.\audio\eatGhost.mp3'></source>
+		</audio>
+		
+	</body>
+</html>
